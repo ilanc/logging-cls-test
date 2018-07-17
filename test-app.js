@@ -32,22 +32,22 @@ function sleep(milliseconds = 1000) {
   return new Promise(resolve => setTimeout(() => resolve(), milliseconds));
 }
 
-function testFn(testType) {
+async function testFn(testType) {
   const namespace = CLS.getNamespace("test-app");
   const test = namespace.get("test");
   console.log(`${test.name}: before`);
 
   switch (testType) {
     case AsyncType.setTimeout: {
-      testFn_setTimeout(test.milliseconds);
+      await testFn_setTimeout(test.milliseconds);
       break;
     }
     case AsyncType.Promise: {
-      testFn_Promise(test.milliseconds);
+      await testFn_Promise(test.milliseconds);
       break;
     }
     case AsyncType.await: {
-      testFn_await(test.milliseconds);
+      await testFn_await(test.milliseconds);
       break;
     }
     default: {
@@ -57,24 +57,30 @@ function testFn(testType) {
 }
 
 function testFn_setTimeout(milliseconds) {
-  setTimeout(() => {
-    const namespace = CLS.getNamespace("test-app");
-    const test = namespace.get("test");
-    console.log(`${test.name}: during`);
-    if (--test.iterations) {
-      testFn_setTimeout(milliseconds);
-    }
-  }, milliseconds);
+  new Promise((resolve, reject) => {
+    setTimeout(async () => {
+      const namespace = CLS.getNamespace("test-app");
+      const test = namespace.get("test");
+      console.log(`${test.name}: during`);
+      if (--test.iterations) {
+        await testFn_setTimeout(milliseconds);
+      }
+      resolve();
+    }, milliseconds);
+  });
 }
 
 function testFn_Promise(milliseconds) {
-  sleep(milliseconds).then(() => {
-    const namespace = CLS.getNamespace("test-app");
-    const test = namespace.get("test");
-    console.log(`${test.name}: during`);
-    if (--test.iterations) {
-      testFn_Promise(milliseconds);
-    }
+  new Promise((resolve, reject) => {
+    sleep(milliseconds).then(async () => {
+      const namespace = CLS.getNamespace("test-app");
+      const test = namespace.get("test");
+      console.log(`${test.name}: during`);
+      if (--test.iterations) {
+        await testFn_Promise(milliseconds);
+      }
+      resolve();
+    });
   });
 }
 
@@ -85,19 +91,23 @@ async function testFn_await(milliseconds) {
   const test = namespace.get("test");
   console.log(`${test.name}: during`);
   if (--test.iterations) {
-    testFn_Promise(milliseconds);
+    await testFn_await(milliseconds);
   }
 }
 
 async function run() {
   console.log(`START`);
   const namespace = CLS.createNamespace("test-app");
+  let testInvocations = [];
   for (let test of _tests) {
-    namespace.run(function() {
-      namespace.set("test", test);
-      testFn(test.type);
-    });
+    testInvocations.push(
+      namespace.runPromise(async function() {
+        namespace.set("test", test);
+        await testFn(test.type);
+      })
+    );
   }
+  await Promise.all(testInvocations);
   console.log(`END`);
 }
 run();
